@@ -20,7 +20,7 @@ app.use(express.json());
 
 // Gemini init
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 
 async function analyzeNews({ type, text, url }) {
