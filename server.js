@@ -21,8 +21,8 @@ app.use(express.json());
 // 🔹 Gemini init
 // NOTE: package.json me "@google/generative-ai": "^0.11.3" ya uske aas-paas hona chahiye
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// v0.11.x ke saath yahi model name safe hai:
-const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
 
 // 🧠 News ko analyse karne wala function
 async function analyzeNews({ type, text, url }) {
