@@ -18,18 +18,24 @@ app.use(
 
 app.use(express.json());
 
-// Gemini init
+// 🔹 Gemini init
+// NOTE: package.json me "@google/generative-ai": "^0.11.3" ya uske aas-paas hona chahiye
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+// v0.11.x ke saath yahi model name safe hai:
+const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-
+// 🧠 News ko analyse karne wala function
 async function analyzeNews({ type, text, url }) {
   const baseInstruction = `
 You are an AI fake news detection system.
 
-IMPORTANT: Respond ONLY with a single valid JSON object — no backticks, no code block, no text outside JSON.
+IMPORTANT RULES:
+- Respond ONLY with a single valid JSON object.
+- NO markdown, NO code fences, NO extra text.
+- Do NOT wrap the JSON in \`\`\` backticks.
+- Just return: { "label": ..., "confidence": ..., "explanation": ... }
 
-Valid JSON format:
+Valid JSON shape:
 
 {
   "label": "fake" | "real" | "uncertain",
@@ -41,28 +47,30 @@ Valid JSON format:
   const userContent =
     type === "text"
       ? `News text:\n${text}`
-      : `News URL:\n${url}\nIf you cannot open URL, respond with label "uncertain".`;
+      : `News URL:\n${url}\nIf you cannot actually open this URL, respond with label "uncertain" and explain why.`;
 
   const prompt = baseInstruction + "\n\n" + userContent;
 
   const result = await model.generateContent(prompt);
   const response = result.response;
-  const rawText = response.text()?.trim() || "";
+  const rawText = response.text() || "";
 
-  let cleaned = rawText;
+  // ---------- JSON cleaning & parsing ----------
+  let cleaned = rawText.trim();
 
-  // Remove ```json ... ``` or ``` ... ```
+  // 1) Remove common markdown fences like ```json ... ``` or ``` ... ```
   cleaned = cleaned.replace(/```json/gi, "");
   cleaned = cleaned.replace(/```/g, "").trim();
 
-  // Extract only { ... }
+  // 2) Try to extract the first {...} block if extra text hai
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (match) cleaned = match[0];
 
-  let parsed = null;
+  let parsed;
   try {
     parsed = JSON.parse(cleaned);
   } catch (e) {
+    console.error("JSON parse error, rawText:", rawText);
     parsed = {
       label: "uncertain",
       confidence: 0.0,
@@ -71,14 +79,7 @@ Valid JSON format:
     };
   }
 
-  if (!parsed.label) parsed.label = "uncertain";
-  if (typeof parsed.confidence !== "number") parsed.confidence = 0.0;
-  if (!parsed.explanation)
-    parsed.explanation = "No explanation provided by model.";
-
-  return parsed;
-}
-
+  // 3) Safety defaults
   if (!parsed.label) parsed.label = "uncertain";
   if (typeof parsed.confidence !== "number") parsed.confidence = 0.0;
   if (!parsed.explanation)
