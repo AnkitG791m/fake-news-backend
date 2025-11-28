@@ -27,36 +27,41 @@ async function analyzeNews({ type, text, url }) {
   const baseInstruction = `
 You are an AI fake news detection system.
 
-Given a news item (either full text or URL), you must respond ONLY in valid JSON with this shape:
+IMPORTANT: Respond ONLY with a single valid JSON object — no backticks, no code block, no text outside JSON.
+
+Valid JSON format:
 
 {
   "label": "fake" | "real" | "uncertain",
   "confidence": 0.0 to 1.0,
   "explanation": "short explanation in simple English"
 }
-
-Rules:
-- "fake" = very likely false / misleading
-- "real" = very likely true / credible
-- "uncertain" = not enough information to decide
-- confidence = number between 0 and 1
-- Do NOT add any extra text outside the JSON.
 `;
 
   const userContent =
     type === "text"
       ? `News text:\n${text}`
-      : `News URL: ${url}\nIf you cannot actually open the URL, mark label as "uncertain" and explain why.`;
+      : `News URL:\n${url}\nIf you cannot open URL, respond with label "uncertain".`;
 
   const prompt = baseInstruction + "\n\n" + userContent;
 
   const result = await model.generateContent(prompt);
   const response = result.response;
-  const rawText = response.text(); // model se JSON string expected hai
+  const rawText = response.text()?.trim() || "";
 
-  let parsed;
+  let cleaned = rawText;
+
+  // Remove ```json ... ``` or ``` ... ```
+  cleaned = cleaned.replace(/```json/gi, "");
+  cleaned = cleaned.replace(/```/g, "").trim();
+
+  // Extract only { ... }
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (match) cleaned = match[0];
+
+  let parsed = null;
   try {
-    parsed = JSON.parse(rawText);
+    parsed = JSON.parse(cleaned);
   } catch (e) {
     parsed = {
       label: "uncertain",
@@ -65,6 +70,14 @@ Rules:
         "Model did not return valid JSON. Raw output was: " + rawText,
     };
   }
+
+  if (!parsed.label) parsed.label = "uncertain";
+  if (typeof parsed.confidence !== "number") parsed.confidence = 0.0;
+  if (!parsed.explanation)
+    parsed.explanation = "No explanation provided by model.";
+
+  return parsed;
+}
 
   if (!parsed.label) parsed.label = "uncertain";
   if (typeof parsed.confidence !== "number") parsed.confidence = 0.0;
